@@ -1,0 +1,3 @@
+[submodule "GazeboGym/src/px4_msgs"]
+	path = GazeboGym/src/px4_msgs
+	url = https://github.com/PX4/px4_msgs.git
