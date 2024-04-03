@@ -1,0 +1,6 @@
+2024-04-03 05:58:08,872 - marltoolkit - INFO - [Train], episode: 5, train_reward: -127.45
+2024-04-03 06:00:52,965 - marltoolkit - INFO - [Train], episode: 10, train_reward: 8.01
+2024-04-03 06:03:29,266 - marltoolkit - INFO - [Train], episode: 15, train_reward: -1029.68
+2024-04-03 06:05:17,092 - marltoolkit - INFO - [Train], episode: 20, train_reward: -978.15
+2024-04-03 06:06:58,537 - marltoolkit - INFO - [Eval], episode: 20, eval_rewards: -429.64
+2024-04-03 06:08:50,978 - marltoolkit - INFO - [Train], episode: 25, train_reward: -1000.00
