@@ -85,29 +85,20 @@ class MultiAgentEnv:
         subprocess.run(['pkill', '-9', '-f', 'mavsdk'])
         print("terminate done")
 
-    async def state_check(self, agent):
-        status = []
-        async for state in agent.core.connection_state():
-            status.append(state.is_connected)
-        if not all(status):
-            print("Warning : there are disconnected statuses!!!")
-    
-    async def health_check(self, agent):
-        healths = []
-        async for health in agent.telemetry.health():
-            healths.append(health.is_global_position_ok and health.is_home_position_ok)
-        if not all(healths):
-            print("Warning : there are some position mismatches!!!")
-
     async def setup(self):
         for i, agent in enumerate(self.agents):
             await aio.sleep(0.01)
             await agent.connect("udp://:{}".format(14541+i))
             subs_odom_task = aio.create_task(self.subscribe_odometry(agent, i))
             subs_ground_truth_task = aio.create_task(self.subscribe_ground_truth(agent, i))
-            sub_states = aio.create_task(self.state_check(agent))
-            sub_healths = aio.create_task(self.health_check(agent))
-            aio.gather(*subs_odom_task,*subs_ground_truth_task,*sub_states,*sub_healths)
+            async for state in agent.core.connection_state():
+                if state.is_connected:
+                    # print(f"-- Connected to drone!")
+                    break
+            async for health in agent.telemetry.health():
+                if health.is_global_position_ok and health.is_home_position_ok:
+                    # print("-- Global position state is good enough for flying.")
+                    break
             await agent.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
             print("-- Arming")
             await aio.sleep(0.1)
