@@ -50,12 +50,12 @@ class MultiAgentEnv:
         self.gz_processes = []
         self.mavserv_processes = []
 
-        self.set_gazebo_env()
-
         self.actions_one_hot_transform = OneHotTransform(self.n_actions)
+        self.gz_processes = []
+        self.mavserv_processes = []
 
 
-    def set_gazebo_env(self):
+    async def set_gazebo_env(self):
         print("set Gazebo, Px4, MAVSDK_server ...")
         for i in range(self.n_agents):
             pos = '0,' + str(i)
@@ -67,10 +67,6 @@ class MultiAgentEnv:
 
             port = str(50051 + i)
             udp = str(14541 + i)
-
-            # port = str(50551 + i)
-            # udp = str(14641 + i)
-
             mavserv_cmd_args = "./mavsdk_server -p " + port + " udp://:" + udp
             print("mavserv_cmd_args :", mavserv_cmd_args)
             self.mavserv_processes.append(subprocess.Popen(mavserv_cmd_args, cwd=self.mavserver_dir, shell=True, stdout=subprocess.DEVNULL))
@@ -79,9 +75,11 @@ class MultiAgentEnv:
 
     def terminate_subprocesses(self):
         print("terminate subprocesses..")
-        for i in range(self.n_agents):
+        for i in range(len(self.gz_processes)):
             self.gz_processes[i].terminate()
+            self.gz_processes[i].wait()
             self.mavserv_processes[i].terminate()
+            self.mavserv_processes[i].wait()
         subprocess.run(['pkill', '-9', '-f', 'gz'])
         subprocess.run(['pkill', '-9', '-f', 'px4'])
         subprocess.run(['pkill', '-9', '-f', 'mavsdk'])
@@ -90,9 +88,9 @@ class MultiAgentEnv:
     async def setup(self):
         for i, agent in enumerate(self.agents):
             await aio.sleep(0.01)
-            await agent.connect()
-            # subs_odom_task = aio.create_task(self.subscribe_odometry(agent, i))
-            # subs_ground_truth_task = aio.create_task(self.subscribe_ground_truth(agent, i))
+            await agent.connect("udp://:{}".format(14541+i))
+            subs_odom_task = aio.create_task(self.subscribe_odometry(agent, i))
+            subs_ground_truth_task = aio.create_task(self.subscribe_ground_truth(agent, i))
             async for state in agent.core.connection_state():
                 if state.is_connected:
                     # print(f"-- Connected to drone!")
@@ -108,11 +106,7 @@ class MultiAgentEnv:
             print("-- Taking off Agent {}".format(i))
             await agent.action.takeoff()
             await aio.sleep(0.1)
-        await aio.sleep(0.01)
-
-        for i, agent in enumerate(self.agents):
-            subs_odom_task = aio.create_task(self.subscribe_odometry(agent, i))
-            subs_ground_truth_task = aio.create_task(self.subscribe_ground_truth(agent, i))
+        await aio.sleep(0.1)
 
         self.init_goal_distances = self.calculate_goal_distance(self.obs)
         print("self.init_goal_distances", self.init_goal_distances)
@@ -212,11 +206,25 @@ class MultiAgentEnv:
         return avail_actions
 
     async def reset(self):
-        self.terminate_subprocesses()
-        await aio.sleep(0.01)
-        # self.set_gazebo_env()
-        # await self.setup()
-
+        tryNo = 0
+        while True:
+            tryNo+=1
+            try:
+                self.terminate_subprocesses()
+                await aio.sleep(0.01)
+                await self.set_gazebo_env()
+                await self.setup()
+                break
+            except Exception as e:
+                print("Reset failed. We will try arming again. Try number : {}".format(tryNo))
+                print("error message : ", e)
+                if tryNo > 100:
+                    print("Reset failed over 100 times. System will shut down.")
+                    self.terminate_subprocesses()
+                    exit(1)
+        return self.states, self.obs
+    
+    def get_states_obs(self):
         return self.states, self.obs
 
 
@@ -229,6 +237,7 @@ class MultiAgentEnv:
             "episode_limit": self.episode_limit
         }
         return env_info
+
 
 
 
