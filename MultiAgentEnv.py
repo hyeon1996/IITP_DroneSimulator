@@ -53,6 +53,9 @@ class MultiAgentEnv:
         self.actions_one_hot_transform = OneHotTransform(self.n_actions)
         self.gz_processes = []
         self.mavserv_processes = []
+        self.subs_odom_tasks = []
+        # self.subs_ground_truth_tasks = []
+        self.breakover=False
 
 
     async def set_gazebo_env(self):
@@ -73,24 +76,54 @@ class MultiAgentEnv:
         await aio.sleep(0.01)
         print("set done.")
 
-    def terminate_subprocesses(self):
+    async def terminate_subprocesses(self):
         print("terminate subprocesses..")
         for i in range(len(self.gz_processes)):
             self.gz_processes[i].terminate()
             self.gz_processes[i].wait()
             self.mavserv_processes[i].terminate()
             self.mavserv_processes[i].wait()
+            
+        self.breakover=True
+        for i in self.subs_odom_tasks:
+            while not i.done():
+                await i
+                try :
+                    await i
+                except aio.CancelledError:
+                    pass
+        
+
+        # for i in range(len(self.subs_ground_truth_tasks)):
+        #     while not self.subs_odom_tasks[i].done():
+        #         await self.subs_odom_tasks[i]
+        #         try:
+        #             await self.subs_odom_tasks[i]
+        #         except aio.CancelledError:
+        #             pass
+        #     while not self.subs_ground_truth_tasks[i].done():
+        #         await self.subs_ground_truth_tasks[i]
+        #         try:
+        #             await self.subs_ground_truth_tasks[i]
+        #         except aio.CancelledError:
+        #             pass
+        # self.subs_ground_truth_tasks = []
+        self.subs_odom_tasks = []
+        self.breakover=False
+        
         subprocess.run(['pkill', '-9', '-f', 'gz'])
         subprocess.run(['pkill', '-9', '-f', 'px4'])
         subprocess.run(['pkill', '-9', '-f', 'mavsdk'])
+
         print("terminate done")
+
 
     async def setup(self):
         for i, agent in enumerate(self.agents):
             await aio.sleep(0.01)
             await agent.connect("udp://:{}".format(14541+i))
-            subs_odom_task = aio.create_task(self.subscribe_odometry(agent, i))
-            subs_ground_truth_task = aio.create_task(self.subscribe_ground_truth(agent, i))
+            self.subs_odom_tasks.append(aio.create_task(self.subscribe_odometry(agent, i)))
+            # self.subs_ground_truth_tasks.append(aio.create_task(self.subscribe_ground_truth(agent, i)))
             async for state in agent.core.connection_state():
                 if state.is_connected:
                     # print(f"-- Connected to drone!")
@@ -117,11 +150,15 @@ class MultiAgentEnv:
                             odom.velocity_body.x_m_s, odom.velocity_body.y_m_s, odom.velocity_body.z_m_s,
                             odom.angular_velocity_body.roll_rad_s, odom.angular_velocity_body.pitch_rad_s,
                             odom.angular_velocity_body.yaw_rad_s]
+            self.states[id] = [odom.position_body.x_m, odom.position_body.y_m, odom.position_body.z_m]
+            if self.breakover:
+                break
 
-    async def subscribe_ground_truth(self, agent, id):
-        async for ground_truth in agent.telemetry.ground_truth():
-            self.states[id] = [ground_truth.latitude_deg, ground_truth.longitude_deg, ground_truth.absolute_altitude_m]
-
+    # async def subscribe_ground_truth(self, agent, id):
+    #     async for ground_truth in agent.telemetry.ground_truth():
+    #         self.states[id] = [ground_truth.latitude_deg, ground_truth.longitude_deg, ground_truth.absolute_altitude_m]
+    #         if self.breakover:
+    #             break
 
     async def step(self, actions):
 
@@ -211,7 +248,7 @@ class MultiAgentEnv:
             tryNo+=1
             try:
                 print("reset trial start. Trial No : {}".format(tryNo))
-                self.terminate_subprocesses()
+                await self.terminate_subprocesses()
                 await aio.sleep(0.01)
                 await self.set_gazebo_env()
                 await self.setup()
