@@ -87,11 +87,12 @@ class MultiAgentEnv:
         self.breakover=True
         for i in self.subs_odom_tasks:
             while not i.done():
-                await i
+
+                await aio.wait_for(i,timeout=5.0)
                 try :
-                    await i
-                except aio.CancelledError:
-                    pass
+                    await aio.wait_for(i,timeout=5.0)
+                except :
+                    break
         
 
         # for i in range(len(self.subs_ground_truth_tasks)):
@@ -122,7 +123,7 @@ class MultiAgentEnv:
         print("setup start")
         for i, agent in enumerate(self.agents):
             await aio.sleep(0.01)
-            await agent.connect("udp://:{}".format(14541+i))
+            await aio.wait_for(agent.connect("udp://:{}".format(14541+i)),timeout=10)
             print("start create task")
             self.subs_odom_tasks.append(aio.create_task(self.subscribe_odometry(agent, i)))
             # self.subs_ground_truth_tasks.append(aio.create_task(self.subscribe_ground_truth(agent, i)))
@@ -299,6 +300,3 @@ class MultiAgentEnv:
             "episode_limit": self.episode_limit
         }
         return env_info
-
-
-
