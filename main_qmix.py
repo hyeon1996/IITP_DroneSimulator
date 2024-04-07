@@ -160,7 +160,7 @@ async def main(args):
             await asyncio.sleep(0.02)
 
             if (epi_count % episode_limit == 0) or terminated:
-                state, obs = gz_env.get_states_obs()
+                state, obs = await gz_env.get_states_obs()
                 break
                 
 
