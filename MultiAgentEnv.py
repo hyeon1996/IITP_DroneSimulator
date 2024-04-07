@@ -18,8 +18,8 @@ class MultiAgentEnv:
         self.n_agents = args.n_agents
         self.episode_limit = args.episode_limit
 
-        self.agents = [System(mavsdk_server_address="127.0.0.1", port=50051+i) for i in range(self.n_agents)]
-        print("self.agents", self.agents)
+        # self.agents = [System(mavsdk_server_address="127.0.0.1", port=50051+i) for i in range(self.n_agents)]
+        # print("self.agents", self.agents)
         self.obs = np.zeros([self.n_agents, 9])
         self.states = np.zeros([self.n_agents, 3])
 
@@ -114,24 +114,47 @@ class MultiAgentEnv:
         subprocess.run(['pkill', '-9', '-f', 'gz'])
         subprocess.run(['pkill', '-9', '-f', 'px4'])
         subprocess.run(['pkill', '-9', '-f', 'mavsdk'])
-
+        self.agents = [System(mavsdk_server_address="127.0.0.1", port=50051+i) for i in range(self.n_agents)]
         print("terminate done")
 
 
     async def setup(self):
+        print("setup start")
         for i, agent in enumerate(self.agents):
             await aio.sleep(0.01)
             await agent.connect("udp://:{}".format(14541+i))
+            print("start create task")
             self.subs_odom_tasks.append(aio.create_task(self.subscribe_odometry(agent, i)))
             # self.subs_ground_truth_tasks.append(aio.create_task(self.subscribe_ground_truth(agent, i)))
+            print("Try no init for state connection")
+            tryNo=0
             async for state in agent.core.connection_state():
                 if state.is_connected:
                     # print(f"-- Connected to drone!")
                     break
+                elif tryNo>100:
+                    print("tryNo over 100")
+                    break
+                else:
+                    tryNo+=1
+                    print("tryNo increased")
+            
+            if tryNo>100:
+                raise RuntimeError("state is not connected")
+            print("Try no init for health connection")
+            tryNo=0
             async for health in agent.telemetry.health():
                 if health.is_global_position_ok and health.is_home_position_ok:
                     # print("-- Global position state is good enough for flying.")
                     break
+                elif tryNo>100:
+                    print("tryNo over 100")
+                    break
+                else:
+                    tryNo+=1
+                    print("tryNo increased")
+            if tryNo>100:
+                raise RuntimeError("health is not connected")
             await agent.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
             print("-- Arming")
             await aio.sleep(0.1)
@@ -263,7 +286,7 @@ class MultiAgentEnv:
                     exit(1)
         return self.states, self.obs
     
-    def get_states_obs(self):
+    async def get_states_obs(self):
         return self.states, self.obs
 
 
