@@ -18,8 +18,8 @@ class MultiAgentEnv:
         self.n_agents = args.n_agents
         self.episode_limit = args.episode_limit
 
-        self.agents = [System(mavsdk_server_address="127.0.0.1", port=50051+i) for i in range(self.n_agents)]
-        print("self.agents", self.agents)
+        # self.agents = [System(mavsdk_server_address="127.0.0.1", port=50051+i) for i in range(self.n_agents)]
+        # print("self.agents", self.agents)
         self.obs = np.zeros([self.n_agents, 9])
         self.states = np.zeros([self.n_agents, 3])
 
@@ -53,6 +53,9 @@ class MultiAgentEnv:
         self.actions_one_hot_transform = OneHotTransform(self.n_actions)
         self.gz_processes = []
         self.mavserv_processes = []
+        self.subs_odom_tasks = []
+        # self.subs_ground_truth_tasks = []
+        self.breakover=False
 
 
     async def set_gazebo_env(self):
@@ -73,32 +76,86 @@ class MultiAgentEnv:
         await aio.sleep(0.01)
         print("set done.")
 
-    def terminate_subprocesses(self):
+    async def terminate_subprocesses(self):
         print("terminate subprocesses..")
         for i in range(len(self.gz_processes)):
             self.gz_processes[i].terminate()
             self.gz_processes[i].wait()
             self.mavserv_processes[i].terminate()
             self.mavserv_processes[i].wait()
+            
+        self.breakover=True
+        for i in self.subs_odom_tasks:
+            while not i.done():
+
+                await aio.wait_for(i,timeout=5.0)
+                try :
+                    await aio.wait_for(i,timeout=5.0)
+                except :
+                    break
+        
+
+        # for i in range(len(self.subs_ground_truth_tasks)):
+        #     while not self.subs_odom_tasks[i].done():
+        #         await self.subs_odom_tasks[i]
+        #         try:
+        #             await self.subs_odom_tasks[i]
+        #         except aio.CancelledError:
+        #             pass
+        #     while not self.subs_ground_truth_tasks[i].done():
+        #         await self.subs_ground_truth_tasks[i]
+        #         try:
+        #             await self.subs_ground_truth_tasks[i]
+        #         except aio.CancelledError:
+        #             pass
+        # self.subs_ground_truth_tasks = []
+        self.subs_odom_tasks = []
+        self.breakover=False
+        
         subprocess.run(['pkill', '-9', '-f', 'gz'])
         subprocess.run(['pkill', '-9', '-f', 'px4'])
         subprocess.run(['pkill', '-9', '-f', 'mavsdk'])
+        self.agents = [System(mavsdk_server_address="127.0.0.1", port=50051+i) for i in range(self.n_agents)]
         print("terminate done")
 
+
     async def setup(self):
+        print("setup start")
         for i, agent in enumerate(self.agents):
             await aio.sleep(0.01)
-            await agent.connect("udp://:{}".format(14541+i))
-            subs_odom_task = aio.create_task(self.subscribe_odometry(agent, i))
-            subs_ground_truth_task = aio.create_task(self.subscribe_ground_truth(agent, i))
+            await aio.wait_for(agent.connect("udp://:{}".format(14541+i)),timeout=10)
+            print("start create task")
+            self.subs_odom_tasks.append(aio.create_task(self.subscribe_odometry(agent, i)))
+            # self.subs_ground_truth_tasks.append(aio.create_task(self.subscribe_ground_truth(agent, i)))
+            print("Try no init for state connection")
+            tryNo=0
             async for state in agent.core.connection_state():
                 if state.is_connected:
                     # print(f"-- Connected to drone!")
                     break
+                elif tryNo>100:
+                    print("tryNo over 100")
+                    break
+                else:
+                    tryNo+=1
+                    print("tryNo increased")
+            
+            if tryNo>100:
+                raise RuntimeError("state is not connected")
+            print("Try no init for health connection")
+            tryNo=0
             async for health in agent.telemetry.health():
                 if health.is_global_position_ok and health.is_home_position_ok:
                     # print("-- Global position state is good enough for flying.")
                     break
+                elif tryNo>100:
+                    print("tryNo over 100")
+                    break
+                else:
+                    tryNo+=1
+                    print("tryNo increased")
+            if tryNo>100:
+                raise RuntimeError("health is not connected")
             await agent.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
             print("-- Arming")
             await aio.sleep(0.1)
@@ -117,11 +174,15 @@ class MultiAgentEnv:
                             odom.velocity_body.x_m_s, odom.velocity_body.y_m_s, odom.velocity_body.z_m_s,
                             odom.angular_velocity_body.roll_rad_s, odom.angular_velocity_body.pitch_rad_s,
                             odom.angular_velocity_body.yaw_rad_s]
+            self.states[id] = [odom.position_body.x_m, odom.position_body.y_m, odom.position_body.z_m]
+            if self.breakover:
+                break
 
-    async def subscribe_ground_truth(self, agent, id):
-        async for ground_truth in agent.telemetry.ground_truth():
-            self.states[id] = [ground_truth.latitude_deg, ground_truth.longitude_deg, ground_truth.absolute_altitude_m]
-
+    # async def subscribe_ground_truth(self, agent, id):
+    #     async for ground_truth in agent.telemetry.ground_truth():
+    #         self.states[id] = [ground_truth.latitude_deg, ground_truth.longitude_deg, ground_truth.absolute_altitude_m]
+    #         if self.breakover:
+    #             break
 
     async def step(self, actions):
 
@@ -211,7 +272,7 @@ class MultiAgentEnv:
             tryNo+=1
             try:
                 print("reset trial start. Trial No : {}".format(tryNo))
-                self.terminate_subprocesses()
+                await self.terminate_subprocesses()
                 await aio.sleep(0.01)
                 await self.set_gazebo_env()
                 await self.setup()
@@ -226,7 +287,7 @@ class MultiAgentEnv:
                     exit(1)
         return self.states, self.obs
     
-    def get_states_obs(self):
+    async def get_states_obs(self):
         return self.states, self.obs
 
 
@@ -239,6 +300,3 @@ class MultiAgentEnv:
             "episode_limit": self.episode_limit
         }
         return env_info
-
-
-

@@ -34,7 +34,6 @@ async def main(args):
     '''start'''''''''''''''''''''''''''''''''''''''''''''
     # 각 요소 class 
     gz_env = MultiAgentEnv(args)
-    await gz_env.setup()
     '''start'''''''''''''''''''''''''''''''''''''''''''''
     # VDN 학습 관련
     vdn_config = VDNConfig()
@@ -45,7 +44,7 @@ async def main(args):
     get_env_info = gz_env.get_env_info()
     args.episode_limit = get_env_info["episode_limit"]
     args.obs_shape = get_env_info["obs_shape"][1]
-    args.state_shape = get_env_info["state_shape"][1]
+    args.state_shape = int(get_env_info["state_shape"][0]/gz_env.n_agents) ####임의 수정. 확인 바람. 기존 코드는 get_env_info["state_shape"][1] 이지만, 현재 env는 state를 flatten해서 제공함. [1]이 존재하지 않음. 
     args.n_agents = get_env_info["n_agents"]
     args.n_actions = gz_env.n_actions
     args.device = device
@@ -126,6 +125,7 @@ async def main(args):
     # 학습 시작
     
     while steps_cnt < args.total_steps:
+        await gz_env.reset()
         epi_count = 0
         episode_limit = args.episode_limit
         marl_agent.reset_agent()
@@ -157,9 +157,7 @@ async def main(args):
             obs = next_obs
 
             if (epi_count % episode_limit == 0) or terminated:
-                #print("reset")
-                #print("step", epi_count)
-                state, obs = await gz_env.reset()
+                state, obs = await gz_env.get_states_obs()
                 break
                 
 
@@ -217,14 +215,13 @@ async def main(args):
 
         if episode_cnt % args.test_log_interval == 0:
             
-            gz_env.set_gazebo_env()
-            await gz_env.setup()
 
             eval_reward_buffer = []
             eval_steps_buffer = []
 
             num_eval_episodes = 5
             for _ in range(num_eval_episodes):
+                await gz_env.reset()
                 print(f"qtran_runner:evaluation episode{num_eval_episodes}")
                 marl_agent.reset_agent()
                 episode_reward = 0.0
@@ -243,14 +240,13 @@ async def main(args):
                     episode_reward += reward
 
                     if (episode_step % episode_limit == 0) or terminated:
-                        state, obs = await gz_env.reset()
+                        state, obs = await gz_env.get_states_obs()
                         break
 
                 eval_reward_buffer.append(episode_reward)
                 eval_steps_buffer.append(episode_step)
 
-                gz_env.set_gazebo_env()
-                await gz_env.setup()
+                
 
             eval_rewards = np.mean(eval_reward_buffer)
             eval_steps = np.mean(eval_steps_buffer)
@@ -266,41 +262,10 @@ async def main(args):
             logger.log_test_data(test_results, steps_cnt)
             marl_agent.save(model_path)
 
-        gz_env.set_gazebo_env()
-        await gz_env.setup()
 
 
         # progress_bar.update(episode_step)
-
-    # env = MultiAgentEnv(args)
-
-    # await env.setup()
-
-    # step = 0
-    # while True:
-    #     t1 = time.time()
-
-    #     action = np.random.randint(env.n_actions, size=env.n_agents)  # i.e. array([8, 2, 0])
-
-    #     next_obs, reward, done = await env.step(action)
-    #     # print(obs)
-
-    #     print("next_obs", next_obs)
-    #     print("reward", reward)
-    #     print("done", done)
-
-    #     step = step + 1
-
-    #     await asyncio.sleep(0.01)  # 100 Hz ?
-
-    #     t2 = time.time()
-    #     print("loop_time = ", t2 - t1)
-
-
-    #     if (step % env.episode_limit == 0) or done:
-    #         print("reset")
-    #         print("step", step)
-    #         obs = await env.reset()
+    gz_env.terminate_subprocesses()
 
 
 
@@ -311,8 +276,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--n_agents', default=3, type=int)
     parser.add_argument('--episode_limit', default=1000, type=int)
-    parser.add_argument('--px4_git_dir', default="../PX4-Autopilot", type=str)
-    parser.add_argument('--mavserver_dir', default="../GazeboPX4MARL", type=str)
+    parser.add_argument('--px4_git_dir', default="../../PX4-Autopilot", type=str)
+    parser.add_argument('--mavserver_dir', default="..", type=str)
     parser.add_argument('--goal_margin', default=0.6, type=float)
     parser.add_argument('--altitude_margin', default=0.3, type=float)
     parser.add_argument('--rad_per_s_margin', default=1.0, type=float)
