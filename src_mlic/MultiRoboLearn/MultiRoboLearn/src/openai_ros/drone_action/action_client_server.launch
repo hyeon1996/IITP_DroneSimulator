@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- action server -->
+    <arg name="vehicle" default="iris"/>
+    <arg name="ID" default="0"/>
+    <node pkg="openai_ros" name="drone_action_server_$(arg ID)" type="drone_action_server.py" args="$(arg vehicle) $(arg ID)" output="screen"/>
+    <!-- action client -->
+    <node pkg="openai_ros" name="drone_action_client_$(arg ID)" type="drone_action_client.py" args="$(arg vehicle) $(arg ID)" output="screen"/>
+</launch>

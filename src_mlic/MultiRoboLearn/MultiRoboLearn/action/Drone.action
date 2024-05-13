@@ -1,0 +1,24 @@
+# This is an action definition file, which has three parts: the goal
+# the result, and the feedback.
+# Part 1: the goal.
+#
+# The final pose
+# 0 : takeoff, 1 : failsafe, 2 : land, 3 : cancel all goal / goal aborted (only for robot env)
+uint32 cmd_mode
+geometry_msgs/Pose target_pose
+---
+# Part 2: the result, sent by action server unpon completion
+#
+# How much time used
+#duration time_elapsed
+# How many updates thrown in total
+uint32 result_type
+string msg
+---
+# Part 3: the feedback,to be sent periodically by server
+#
+# The amount of time elapsed from the start
+#duration time_elapsed
+# distance from the target_pose
+float32 target_dist
+string status
