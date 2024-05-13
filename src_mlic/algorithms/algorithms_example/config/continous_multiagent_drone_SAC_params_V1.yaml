@@ -1,0 +1,145 @@
+drone: #namespace
+    n_agents: 1
+    running_step: 0.04 # amount of time the control will be executed  default = 0.04
+    pos_step: 0.01     # increment in position for each command 0.010
+
+
+
+
+    #SAC paramters -old version
+    seed: 0
+    hidden_size: 2
+    memory_size: 80000
+    gamma: 0.99
+    lr: 0.001
+    tau: 0.005
+    update_iteration: 1
+    directory: './model_save/'
+
+    agent_name: 'agent1'
+
+    test: True
+    experiment_num: 5
+    episode_number: 700
+    max_timestep: 10000
+
+    #SAC parameters -V1
+    target_update_interval: 1
+    gradient_steps: 1
+    capacity: 1000
+    iteration: 10000
+
+    num_hidden_layers: 2
+    num_hidden_units_per_layer: 256
+    sample_frequency: 256
+    activation: 'Relu'
+    log_interval:  1    #2000
+    load: True
+
+
+
+
+
+    #DQN parameters
+
+
+    learning_rate: 0.0003   #default lr = 0.00005
+
+    memory_capacity: 1000000
+    batch_size: 128
+    target_frequency: 10000
+    maximum_exploration: 10000 #default 100000
+    first_step_memory: 0
+    replay_steps: 4
+    number_nodes: 2560   #default is 256
+
+    prioritization_scale: 0.5
+
+
+    max_random_moves: 0
+    agents_number: 3
+
+
+    running_step: 0.06 # Time for each step default = 0.06- 0.1- now:0.5
+    wait_time: 0.1 # Time to wait in the reset phases
+
+    n_actions: 4 # linear x,y,z angular yaw
+    n_observations: 96 # We have 6 different observations default = 2166,2168
+
+    #encoder parameters
+
+    in_channels: 1 # depth
+    out_channels: 48 # image observation
+    width: 160
+    height: 120
+
+    #except image
+    n_odom_obs : 8
+    n_scan_obs : 40
+    n_image_obs : 48
+
+    speed_step: 0.5 # Time to wait in the reset phases 1.0
+
+    linear_forward_speed: 0.15 # Speed for going fowards   default = 0.25 - 0.35
+    linear_turn_speed: 0.1 # Lienare speed when turning default = 0.05 - 0.1
+    angular_speed: 0.3 # Angular speed when turning Left or Right 0.3
+    init_linear_forward_speed: 0.0 # Initial linear speed in which we start each episode
+    init_linear_turn_speed: 0.0 # Initial angular speed in shich we start each episode
+    
+    new_ranges: 5 # How many laser readings we jump in each observation reading, the bigger the less laser resolution
+    min_range: 0.2 # Minimum meters below wich we consider whether done   default = 0.1
+    max_laser_value: 5 # Value considered Ok, no wall
+    min_laser_value: 0.2 # Value considered there is an obstacle or crashed
+    
+
+
+    # go to opposite x = 8
+    iris_0:
+        init_pose:
+            x: -8
+            y: -4.5
+            z: 0.5
+
+        desired_pose: 
+            x: 8
+            y: -4.5
+            z: 1.3
+
+    iris_1:
+        init_pose:
+            x: -8
+            y: -1.5
+            z: 0.5
+
+        desired_pose: #namespace
+            x: 8
+            y: -1.5
+            z: 1.3
+
+    iris_2:
+        init_pose:
+            x: -8
+            y: 1.5
+            z: 0.5
+
+        desired_pose: #namespace
+            x: 8
+            y: 1.5
+            z: 1.3
+
+    iris_3:
+        init_pose:
+            x: -8
+            y: 4.5
+            z: 0.5
+
+        desired_pose: #namespace
+            x: 8
+            y: 4.5
+            z: 1.3
+
+#    forwards_reward: 3  # Points Given to go forwards
+#    turn_reward: 1 # Points Given to turn as action
+#    end_episode_points: 200 # Points given when ending an episode
+    
+
